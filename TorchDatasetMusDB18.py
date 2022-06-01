@@ -57,10 +57,6 @@ class TorchDatasetMusDB18(dataset.Dataset):
         for i,data_path in enumerate(data_path_list):
             print(f"{i+1}/{len(data_path_list)} {data_path}")
             self.data_set.append(self.read_feature_pickle(f"{dataset_dir}/{data_path}"))
-            
-            if i == 5 :
-                print('Debug..')
-                break
         
         self.samples_per_track:int = samples_per_track
         self.segment_size = int(sr * segment_length_second)

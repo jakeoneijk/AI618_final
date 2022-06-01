@@ -9,10 +9,11 @@ from core.wandb_logger import WandbLogger
 from tensorboardX import SummaryWriter
 import os
 import numpy as np
+import pdb
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str, default='config/sr_sr3_16_128.json',
+    parser.add_argument('-c', '--config', type=str, default='config/sr_musdb.json',
                         help='JSON file for configuration')
     parser.add_argument('-p', '--phase', type=str, choices=['train', 'val'],
                         help='Run either train(training) or val(generation)', default='train')
@@ -51,13 +52,21 @@ if __name__ == "__main__":
         wandb_logger = None
 
     # dataset
+    
+    from TorchDatasetMusDB18 import TorchDatasetMusDB18
     for phase, dataset_opt in opt['datasets'].items():
         if phase == 'train' and args.phase != 'val':
-            train_set = Data.create_dataset(dataset_opt, phase)
+            #train_set = Data.create_dataset(dataset_opt, phase)
+            train_set = TorchDatasetMusDB18(dataset_opt['dataroot'], dataset_opt['mode'],
+                                            dataset_opt['sr'], dataset_opt['segment_length_second'], 
+                                            dataset_opt['samples_per_track'])
             train_loader = Data.create_dataloader(
                 train_set, dataset_opt, phase)
         elif phase == 'val':
-            val_set = Data.create_dataset(dataset_opt, phase)
+            #val_set = Data.create_dataset(dataset_opt, phase)
+            val_set = TorchDatasetMusDB18(dataset_opt['dataroot'], dataset_opt['mode'],
+                                            dataset_opt['sr'], dataset_opt['segment_length_second'],
+                                            dataset_opt['samples_per_track'])            
             val_loader = Data.create_dataloader(
                 val_set, dataset_opt, phase)
     logger.info('Initial Dataset Finished')
@@ -65,6 +74,7 @@ if __name__ == "__main__":
     # model
     diffusion = Model.create_model(opt)
     logger.info('Initial Model Finished')
+
 
     # Train
     current_step = diffusion.begin_step
@@ -81,6 +91,7 @@ if __name__ == "__main__":
         while current_step < n_iter:
             current_epoch += 1
             for _, train_data in enumerate(train_loader):
+                
                 current_step += 1
                 if current_step > n_iter:
                     break
@@ -128,11 +139,12 @@ if __name__ == "__main__":
                             lr_img, '{}/{}_{}_lr.png'.format(result_path, current_step, idx))
                         Metrics.save_img(
                             fake_img, '{}/{}_{}_inf.png'.format(result_path, current_step, idx))
-                        tb_logger.add_image(
-                            'Iter_{}'.format(current_step),
-                            np.transpose(np.concatenate(
-                                (fake_img, sr_img, hr_img), axis=1), [2, 0, 1]),
-                            idx)
+                        try : 
+                            tb_logger.add_image('Iter_{}'.format(current_step),
+                                np.expand_dims(np.concatenate((fake_img, sr_img, hr_img), axis=1),0),idx) 
+                            # np.transpose( , [2, 0, 1])
+                        except : 
+                            pdb.set_trace()
                         avg_psnr += Metrics.calculate_psnr(
                             sr_img, hr_img)
 

@@ -65,5 +65,5 @@ class PreprocessorMusDB18:
         
     
 if __name__ == "__main__":
-    preprocessor_musdb_18 = PreprocessorMusDB18("./data/musdb18","./dataset/musdb18",16000)
+    preprocessor_musdb_18 = PreprocessorMusDB18("../data/musdb18","../data/musdb18_processed",16000)
     preprocessor_musdb_18.preprocess_data()

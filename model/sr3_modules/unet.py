@@ -2,6 +2,7 @@ import math
 import torch
 from torch import nn
 import torch.nn.functional as F
+import numpy as np
 from inspect import isfunction
 
 
@@ -231,8 +232,14 @@ class UNet(nn.Module):
         self.ups = nn.ModuleList(ups)
 
         self.final_conv = Block(pre_channel, default(out_channel, in_channel), groups=norm_groups)
+    
 
     def forward(self, x, time):
+        origin_len = x.shape[-1]
+        pad_len = (int(np.ceil(x.shape[3] / 32)) * 32 - origin_len)
+        x = F.pad(x, pad=(0, pad_len, 0, 0))
+        x = x[:,:, 0 : x.shape[2]-1,:]
+        
         t = self.noise_level_mlp(time) if exists(
             self.noise_level_mlp) else None
 
@@ -255,5 +262,9 @@ class UNet(nn.Module):
                 x = layer(torch.cat((x, feats.pop()), dim=1), t)
             else:
                 x = layer(x)
+        x = self.final_conv(x)
+        
+        x = F.pad(x, pad=(0, 0,0,1))
+        x = x[...,:origin_len]
 
-        return self.final_conv(x)
+        return x

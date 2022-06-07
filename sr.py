@@ -9,10 +9,13 @@ from core.wandb_logger import WandbLogger
 from tensorboardX import SummaryWriter
 import os
 import numpy as np
+from SpecPlot import SpecPlot
+
+from TorchDatasetMusDB18Spec import TorchDatasetMusDB18Spec
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str, default='config/sr_sr3_16_128.json',
+    parser.add_argument('-c', '--config', type=str, default='config/musdb.json',
                         help='JSON file for configuration')
     parser.add_argument('-p', '--phase', type=str, choices=['train', 'val'],
                         help='Run either train(training) or val(generation)', default='train')
@@ -50,14 +53,20 @@ if __name__ == "__main__":
     else:
         wandb_logger = None
 
+    spec_plot = SpecPlot(opt['datasets']["train"]["max_value_of_spec"])
     # dataset
     for phase, dataset_opt in opt['datasets'].items():
         if phase == 'train' and args.phase != 'val':
-            train_set = Data.create_dataset(dataset_opt, phase)
+            train_set = TorchDatasetMusDB18Spec(dataset_opt['dataroot'], dataset_opt['mode'],
+                                            dataset_opt['sr'], dataset_opt['segment_length_second'], 
+                                            dataset_opt['samples_per_track'],dataset_opt["max_value_of_spec"])
             train_loader = Data.create_dataloader(
                 train_set, dataset_opt, phase)
         elif phase == 'val':
-            val_set = Data.create_dataset(dataset_opt, phase)
+            val_set = TorchDatasetMusDB18Spec(dataset_opt['dataroot'], dataset_opt['mode'],
+                                            dataset_opt['sr'], dataset_opt['segment_length_second'],
+                                            dataset_opt['samples_per_track'],dataset_opt["max_value_of_spec"])
+                                            
             val_loader = Data.create_dataloader(
                 val_set, dataset_opt, phase)
     logger.info('Initial Dataset Finished')
@@ -114,11 +123,18 @@ if __name__ == "__main__":
                         diffusion.feed_data(val_data)
                         diffusion.test(continous=False)
                         visuals = diffusion.get_current_visuals()
+
+                        spec_plot.model_output_to_spec_db_scale(visuals['SR'],'{}/{}_{}_sr.png'.format(result_path, current_step, idx))
+                        spec_plot.model_output_to_spec_db_scale(visuals['HR'],'{}/{}_{}_hr.png'.format(result_path, current_step, idx))
+                        spec_plot.model_output_to_spec_db_scale(visuals['LR'],'{}/{}_{}_lr.png'.format(result_path, current_step, idx))
+                        spec_plot.model_output_to_spec_db_scale(visuals['INF'],'{}/{}_{}_inf.png'.format(result_path, current_step, idx))
+
                         sr_img = Metrics.tensor2img(visuals['SR'])  # uint8
                         hr_img = Metrics.tensor2img(visuals['HR'])  # uint8
                         lr_img = Metrics.tensor2img(visuals['LR'])  # uint8
                         fake_img = Metrics.tensor2img(visuals['INF'])  # uint8
-
+                    '''
+                        
                         # generation
                         Metrics.save_img(
                             hr_img, '{}/{}_{}_hr.png'.format(result_path, current_step, idx))
@@ -152,14 +168,14 @@ if __name__ == "__main__":
                         current_epoch, current_step, avg_psnr))
                     # tensorboard logger
                     tb_logger.add_scalar('psnr', avg_psnr, current_step)
-
+                    
                     if wandb_logger:
                         wandb_logger.log_metrics({
                             'validation/val_psnr': avg_psnr,
                             'validation/val_step': val_step
                         })
                         val_step += 1
-
+                    '''
                 if current_step % opt['train']['save_checkpoint_freq'] == 0:
                     logger.info('Saving models and training states.')
                     diffusion.save_network(current_epoch, current_step)

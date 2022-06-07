@@ -42,13 +42,20 @@ class ProcessLRSRAudio:
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
     from TorchDatasetMusDB18 import TorchDatasetMusDB18
+    import numpy as np
 
     data_set = TorchDatasetMusDB18("./dataset/musdb18/train")
-    batch_size:int = 16
+    batch_size:int = 1
     data_loader = DataLoader(dataset=data_set,batch_size=batch_size,shuffle=True,num_workers=(batch_size-1),drop_last=True)
     
     process_lr_sr_audio = ProcessLRSRAudio()
+    max_value = -np.inf
+    min_value = np.inf
     for data in data_loader:
         audio_dict:dict = process_lr_sr_audio.get_lr_hr_dict_keep_sr(data)
         hr_spec = process_lr_sr_audio.get_spectrogram_and_phase_from_audio(audio_dict["hr"])["spec"]
         lr_spec = process_lr_sr_audio.get_spectrogram_and_phase_from_audio(audio_dict["lr"])["spec"]
+        max_value = max(max(float(torch.max(hr_spec)),max_value),float(torch.max(lr_spec)))
+        min_value = min(min(float(torch.min(hr_spec)),min_value),float(torch.min(lr_spec)))
+    
+    print(f"max is {max_value} ans min value is {min_value}")

@@ -68,6 +68,17 @@ class DDPM(BaseModel):
                     self.data['SR'], continous)
         self.netG.train()
 
+    def test_inpaint(self, continuous=False):
+        self.netG.eval()
+        with torch.no_grad():
+            if isinstance(self.netG, nn.DataParallel):
+                self.SR = self.netG.module.image_completion(
+                    self.data['SR'], self.data['mask'], resample_steps=10, continuous=continuous)
+            else:
+                self.SR = self.netG.image_completion(
+                    self.data['SR'], self.data['mask'], resample_steps=10, continuous=continuous)
+        self.netG.train()
+
     def sample(self, batch_size=1, continous=False):
         self.netG.eval()
         with torch.no_grad():

@@ -35,22 +35,29 @@ class ProcessLRSRAudio:
         return audio
     
     def get_lr_hr_dict_keep_sr(self,hr_audio:Tensor) -> dict:
-        low_audio:Tensor = self.low_sampled_audio(hr_audio)
+        low_audio = self.low_sampled_audio(hr_audio)
         low_audio = self.upsample_audio(low_audio)
         time_size:int = max(low_audio.shape[-1],hr_audio.shape[-1])
         return {"hr":hr_audio[...,:time_size],"lr":low_audio[...,:time_size]}
     
-    def get_spectrogram_and_phase_from_audio(self,audio:torch):
+    def get_spectrogram_and_phase_from_audio(self,audio:torch, include_mask=False):
         stft:Tensor = torch.stft(audio, self.nfft, self.hop_size, window=self.hann_window, return_complex=True)
         spectrogram:Tensor = torch.abs(stft)
         phase:Tensor = torch.angle(stft)
-        return {"spec":spectrogram, "phase": phase} 
+        ret = {"spec":spectrogram, "phase": phase}
+        if include_mask:
+            mask = stft.clone()
+            mask[:,int((self.nfft//2+1) / self.upsample_ratio):,...] = 0
+            mask = torch.abs(mask)
+            mask = torch.where(mask==0, 1, 0)
+            ret['mask'] = mask
+        return ret
 
 
 
 class TorchDatasetMusDB18(dataset.Dataset):
     def __init__(self, dataset_dir:str, mode:str='HR', sr:int = 16000, 
-                 segment_length_second:float=3, samples_per_track:int=64) -> None:
+                 segment_length_second:float=3, samples_per_track:int=64, need_mask=False) -> None:
         data_path_list:list = os.listdir(dataset_dir)
         self.data_set = list()
 
@@ -62,6 +69,7 @@ class TorchDatasetMusDB18(dataset.Dataset):
         self.segment_size = int(sr * segment_length_second)
         self.process = ProcessLRSRAudio()
         self.need_LR = mode=='LRHR'
+        self.need_mask = need_mask
     
     def __len__(self) -> int:
         return self.samples_per_track * len(self.data_set)
@@ -81,19 +89,25 @@ class TorchDatasetMusDB18(dataset.Dataset):
         data = torch.from_numpy(segmented_audio).unsqueeze(0)
         
         audio_dict:dict = self.process.get_lr_hr_dict_keep_sr(data) # (1, 48000) x2
-    
+        
         #print(audio_dict["hr"].shape, audio_dict["lr"].shape)
-        hr_spec = self.process.get_spectrogram_and_phase_from_audio(audio_dict["hr"])["spec"].float() # (1, 129, 376)
+        hr_dict = self.process.get_spectrogram_and_phase_from_audio(audio_dict['hr'], include_mask=True)
+        hr_spec = hr_dict['spec'].float()
+        mask = hr_dict['mask']
+        #hr_spec = self.process.get_spectrogram_and_phase_from_audio(audio_dict["hr"])["spec"].float() # (1, 129, 376)
         lr_spec = self.process.get_spectrogram_and_phase_from_audio(audio_dict["lr"])["spec"].float()  
         bit = 32
         _, w, h = hr_spec.shape
         resize = torchvision.transforms.Resize((round(w/bit)*bit, round(h/bit)*bit), 
-                                               torchvision.transforms.InterpolationMode.BILINEAR) 
+                                            torchvision.transforms.InterpolationMode.BILINEAR) 
         hr_spec = resize(hr_spec)
-        lr_spec = resize(lr_spec)   
+        lr_spec = resize(lr_spec)
+        mask = resize(mask)
         result = {'HR' : hr_spec, 'SR' : lr_spec, 'Index' : index}
         if self.need_LR : 
             result['LR'] = lr_spec
+        if self.need_mask:
+            result['mask'] = mask
         
         return result
     

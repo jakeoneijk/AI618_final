@@ -174,6 +174,23 @@ class GaussianDiffusion(nn.Module):
         return model_mean + noise * (0.5 * model_log_variance).exp()
 
     @torch.no_grad()
+    def p_inpainting_sample(self, x0, xt, mask, t, clip_denoised=True, condition_x=None):
+        assert mask.shape == xt.shape, 'Shape of the mask and x must match'
+        
+        # find x_unknown first
+        model_mean, model_log_variance = self.p_mean_variance(
+            x=xt, t=t, clip_denoised=clip_denoised, condition_x=condition_x)
+        noise = torch.randn_like(xt) if t > 0 else torch.zeros_like(xt)
+        x_unknown = model_mean + noise * (0.5 * model_log_variance).exp()
+        x_unknown = x_unknown * mask
+        
+        # find x_known
+        x_known = self.q_sample(x0, continuous_sqrt_alpha_cumprod=self.sqrt_alphas_cumprod[t])
+        x_known = x_known * (1-mask)
+
+        return x_known + x_unknown
+
+    @torch.no_grad()
     def p_sample_loop(self, x_in, continous=False):
         device = self.betas.device
         sample_inter = (1 | (self.num_timesteps//10))
@@ -200,6 +217,25 @@ class GaussianDiffusion(nn.Module):
             return ret_img[-1]
 
     @torch.no_grad()
+    def p_inpainting_loop(self, x_in, mask, resample_steps, continous=False):
+        device = self.betas.device
+        sample_inter = (1 | (self.num_timesteps//10))
+        assert self.conditional, 'Must be conditional'
+        x = x_in
+        shape = x.shape
+        img = torch.randn(shape, device=device)
+        ret_img = x
+        for i in tqdm(reversed(range(0, self.num_timesteps)), desc='sampling loop time step', total=self.num_timesteps):
+            for u in range(resample_steps):
+                img = self.p_inpainting_sample(x_in, img, mask, i, condition_x=x)
+            if i % sample_inter == 0:
+                ret_img = torch.cat([ret_img, img], dim=0)
+        if continous:
+            return ret_img
+        else:
+            return ret_img[-1]
+
+    @torch.no_grad()
     def sample(self, batch_size=1, continous=False):
         image_size = self.image_size
         channels = self.channels
@@ -208,6 +244,9 @@ class GaussianDiffusion(nn.Module):
     @torch.no_grad()
     def super_resolution(self, x_in, continous=False):
         return self.p_sample_loop(x_in, continous)
+
+    def image_completion(self, x_in, mask, resample_steps=10, continuous=False):
+        return self.p_inpainting_loop(x_in=x_in, mask=mask, resample_steps=resample_steps, continous=continuous)
 
     def q_sample(self, x_start, continuous_sqrt_alpha_cumprod, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
@@ -235,7 +274,7 @@ class GaussianDiffusion(nn.Module):
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(
             x_start=x_start, continuous_sqrt_alpha_cumprod=continuous_sqrt_alpha_cumprod.view(-1, 1, 1, 1), noise=noise)
-
+        
         if not self.conditional:
             x_recon = self.denoise_fn(x_noisy, continuous_sqrt_alpha_cumprod)
         else:

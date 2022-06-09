@@ -6,9 +6,9 @@ import librosa.display
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 class SpecPlot:
-    def __init__(self, scale_value:float=65) -> None:
+    def __init__(self, sr:int=16000, scale_value:float=65) -> None:
+        self.sr = sr
         self.scale_value:float = scale_value
     
     def model_output_to_spec_db_scale(self, model_output:Tensor, save_path:str=""):
@@ -17,7 +17,8 @@ class SpecPlot:
 
         fig, ax = plt.subplots()
         img = librosa.display.specshow(spec_db, ax=ax)
+        plt.savefig(f"{save_path}.png",dpi=1000)
 
-        if save_path != "":
-            plt.savefig(save_path,dpi=1000)
+        audio = librosa.griffinlim(spec)
+        sf.write(f"{save_path}.wav", audio, self.sr)
         

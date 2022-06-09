@@ -1,19 +1,20 @@
-from ProcessLRSRAudio import ProcessLRSRAudio
+from TorchDatasetMusDB18 import ProcessLRSRAudio
 import os
 import torch
 import pickle
+from glob import glob
 from numpy import ndarray
 from random import randint
 import torch.utils.data.dataset as dataset
 
 class TorchDatasetMusDB18Spec(dataset.Dataset):
     def __init__(self, dataset_dir:str, mode:str='HR', sr:int = 16000, segment_length_second:float=3, samples_per_track:int=64, scale_value:float = 65) -> None:
-        data_path_list:list = os.listdir(dataset_dir)
+        data_path_list:list = glob(f"{dataset_dir}/*.pkl")
         self.data_set = list()
 
         for i,data_path in enumerate(data_path_list):
             print(f"{i+1}/{len(data_path_list)} {data_path}")
-            self.data_set.append(self.read_feature_pickle(f"{dataset_dir}/{data_path}"))
+            self.data_set.append(self.read_feature_pickle(f"{data_path}"))
         
         self.samples_per_track:int = samples_per_track
         self.segment_size = int(sr * segment_length_second)

@@ -9,6 +9,7 @@ from core.wandb_logger import WandbLogger
 from tensorboardX import SummaryWriter
 import os
 import numpy as np
+import pdb
 
 from SpecPlot import SpecPlot
 
@@ -57,22 +58,8 @@ if __name__ == "__main__":
     spec_plot = SpecPlot(opt['datasets']["train"]["max_value_of_spec"])
     # dataset
     
-    from TorchDatasetMusDB18 import TorchDatasetMusDB18
     for phase, dataset_opt in opt['datasets'].items():
         if phase == 'train' and args.phase != 'val':
-<<<<<<< HEAD
-            #train_set = Data.create_dataset(dataset_opt, phase)
-            train_set = TorchDatasetMusDB18(dataset_opt['dataroot'], dataset_opt['mode'],
-                                            dataset_opt['sr'], dataset_opt['segment_length_second'], 
-                                            dataset_opt['samples_per_track'])
-            train_loader = Data.create_dataloader(
-                train_set, dataset_opt, phase)
-        elif phase == 'val':
-            #val_set = Data.create_dataset(dataset_opt, phase)
-            val_set = TorchDatasetMusDB18(dataset_opt['dataroot'], dataset_opt['mode'],
-                                            dataset_opt['sr'], dataset_opt['segment_length_second'],
-                                            dataset_opt['samples_per_track'])            
-=======
             train_set = TorchDatasetMusDB18Spec(dataset_opt['dataroot'], dataset_opt['mode'],
                                             dataset_opt['sr'], dataset_opt['segment_length_second'], 
                                             dataset_opt['samples_per_track'],dataset_opt["max_value_of_spec"])
@@ -82,8 +69,6 @@ if __name__ == "__main__":
             val_set = TorchDatasetMusDB18Spec(dataset_opt['dataroot'], dataset_opt['mode'],
                                             dataset_opt['sr'], dataset_opt['segment_length_second'],
                                             dataset_opt['samples_per_track'],dataset_opt["max_value_of_spec"])
-                                            
->>>>>>> 25081934fe3cc940b903bead1e9e1d75a926cd36
             val_loader = Data.create_dataloader(
                 val_set, dataset_opt, phase)
     logger.info('Initial Dataset Finished')
@@ -143,40 +128,40 @@ if __name__ == "__main__":
                         diffusion.test(continous=False)
                         visuals = diffusion.get_current_visuals()
 
-                        spec_plot.model_output_to_spec_db_scale(visuals['SR'],'{}/{}_{}_sr.png'.format(result_path, current_step, idx))
-                        spec_plot.model_output_to_spec_db_scale(visuals['HR'],'{}/{}_{}_hr.png'.format(result_path, current_step, idx))
-                        spec_plot.model_output_to_spec_db_scale(visuals['LR'],'{}/{}_{}_lr.png'.format(result_path, current_step, idx))
-                        spec_plot.model_output_to_spec_db_scale(visuals['INF'],'{}/{}_{}_inf.png'.format(result_path, current_step, idx))
+                        # Replace save spec plot
+                        spec_plot.model_output_to_spec_db_scale(visuals['SR'],'{}/{}_{}_sr'.format(result_path, current_step, idx))
+                        spec_plot.model_output_to_spec_db_scale(visuals['HR'],'{}/{}_{}_hr'.format(result_path, current_step, idx))
+                        spec_plot.model_output_to_spec_db_scale(visuals['LR'],'{}/{}_{}_lr'.format(result_path, current_step, idx))
+                        spec_plot.model_output_to_spec_db_scale(visuals['INF'],'{}/{}_{}_inf'.format(result_path, current_step, idx))
 
-                        sr_img = Metrics.tensor2img(visuals['SR'])  # uint8
-                        hr_img = Metrics.tensor2img(visuals['HR'])  # uint8
-                        lr_img = Metrics.tensor2img(visuals['LR'])  # uint8
-                        fake_img = Metrics.tensor2img(visuals['INF'])  # uint8
-                    '''
+                    #     sr_img = Metrics.tensor2img(visuals['SR'])  # uint8
+                    #     hr_img = Metrics.tensor2img(visuals['HR'])  # uint8
+                    #     lr_img = Metrics.tensor2img(visuals['LR'])  # uint8
+                    #     fake_img = Metrics.tensor2img(visuals['INF'])  # uint8
                         
-                        # generation
-                        Metrics.save_img(
-                            hr_img, '{}/{}_{}_hr.png'.format(result_path, current_step, idx))
-                        Metrics.save_img(
-                            sr_img, '{}/{}_{}_sr.png'.format(result_path, current_step, idx))
-                        Metrics.save_img(
-                            lr_img, '{}/{}_{}_lr.png'.format(result_path, current_step, idx))
-                        Metrics.save_img(
-                            fake_img, '{}/{}_{}_inf.png'.format(result_path, current_step, idx))
-                        try : 
-                            tb_logger.add_image('Iter_{}'.format(current_step),
-                                np.expand_dims(np.concatenate((fake_img, sr_img, hr_img), axis=1),0),idx) 
-                            # np.transpose( , [2, 0, 1])
-                        except : 
-                            pdb.set_trace()
-                        avg_psnr += Metrics.calculate_psnr(
-                            sr_img, hr_img)
+                    #     # generation
+                    #     Metrics.save_img(
+                    #         hr_img, '{}/{}_{}_hr.png'.format(result_path, current_step, idx))
+                    #     Metrics.save_img(
+                    #         sr_img, '{}/{}_{}_sr.png'.format(result_path, current_step, idx))
+                    #     Metrics.save_img(
+                    #         lr_img, '{}/{}_{}_lr.png'.format(result_path, current_step, idx))
+                    #     Metrics.save_img(
+                    #         fake_img, '{}/{}_{}_inf.png'.format(result_path, current_step, idx))
+                    #     try : 
+                    #         tb_logger.add_image('Iter_{}'.format(current_step),
+                    #             np.expand_dims(np.concatenate((fake_img, sr_img, hr_img), axis=1),0),idx) 
+                    #         # np.transpose( , [2, 0, 1])
+                    #     except : 
+                    #         pdb.set_trace()
+                    #     avg_psnr += Metrics.calculate_psnr(
+                    #         sr_img, hr_img)
 
-                        if wandb_logger:
-                            wandb_logger.log_image(
-                                f'validation_{idx}', 
-                                np.concatenate((fake_img, sr_img, hr_img), axis=1)
-                            )
+                        # if wandb_logger:
+                        #     wandb_logger.log_image(
+                        #         f'validation_{idx}', 
+                        #         np.concatenate((fake_img, sr_img, hr_img), axis=1)
+                        #     )
 
                     avg_psnr = avg_psnr / idx
                     diffusion.set_new_noise_schedule(
@@ -195,7 +180,7 @@ if __name__ == "__main__":
                             'validation/val_step': val_step
                         })
                         val_step += 1
-                    '''
+
                 if current_step % opt['train']['save_checkpoint_freq'] == 0:
                     logger.info('Saving models and training states.')
                     diffusion.save_network(current_epoch, current_step)

@@ -6,6 +6,7 @@ import numpy as np
 import librosa
 from numpy import ndarray
 import musdb
+import soundfile as sf
 
 class PreprocessorMusDB18:
     def __init__(self,original_data_dir:str,preprocessed_data_dir:str,target_sr:int) -> None:
@@ -15,6 +16,7 @@ class PreprocessorMusDB18:
         self.mono: bool = True
         self.musdb_origin_sr:int = 44100
         self.target_sr = target_sr
+        self.stem_name = ['mixture', 'drums', 'bass', 'other', 'vocals']
 
     def preprocess_data(self) -> None:
         meta_param_list:list = self.get_meta_data_param()
@@ -36,7 +38,7 @@ class PreprocessorMusDB18:
         return param_list
     
     def get_audio_from_musdb_track(self, musdb_track, mono:bool) -> ndarray:
-        audio:ndarray = musdb_track.audio.T
+        audio:ndarray = musdb_track.T
 
         if mono:
             audio = np.mean(audio, axis=0)
@@ -50,15 +52,18 @@ class PreprocessorMusDB18:
         mus = musdb.DB(root=self.original_data_dir, subsets=subset_split[0], split=subset_split[1])
         track = mus.tracks[track_index]
 
-        feature_dict:dict = dict()
-        feature_dict["audio"] = self.get_audio_from_musdb_track(track,self.mono)
-        datatype:str = subset_split[1] if subset_split[1] is not None else subset_split[0]
-        
-        save_path:str = f"{self.preprocessed_data_dir}/{datatype}"
-        os.makedirs(save_path,exist_ok=True)
-
-        with open(save_path + f"/{track.name}.pkl",'wb') as file_writer:
-            pickle.dump(feature_dict,file_writer)
+        for stem_idx in range(len(track.stems)):
+            feature_dict:dict = dict()
+            audio = self.get_audio_from_musdb_track(track.stems[stem_idx],self.mono)
+            feature_dict["audio"] = audio
+            datatype:str = subset_split[1] if subset_split[1] is not None else subset_split[0]
+            
+            save_path:str = f"{self.preprocessed_data_dir}/{datatype}"
+            os.makedirs(save_path,exist_ok=True)
+            
+            sf.write(save_path + f"/{track.name}_{self.stem_name[stem_idx]}.wav", audio, self.target_sr)
+            with open(save_path + f"/{track.name}_{self.stem_name[stem_idx]}.pkl",'wb') as file_writer:
+                pickle.dump(feature_dict,file_writer)
 
         print("{} Write to {}".format(track_index, save_path))
         

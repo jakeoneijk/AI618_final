@@ -4,6 +4,7 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 from inspect import isfunction
+from torchlibrosa.stft import ISTFT, STFT, magphase
 
 
 def exists(x):
@@ -64,15 +65,6 @@ class Upsample(nn.Module):
 
     def forward(self, x):
         return self.conv(self.up(x))
-
-class PixelShuffle(nn.Module):
-    def __init__(self, dim, scale=2):
-        self.conv = nn.Conv2d(dim, dim*scale*scale, padding='same')
-        self.pixel_shuffle = nn.PixelShuffle(scale)
-    
-    def forward(self, x):
-        return self.pixel_shuffle(self.conv(x))
-
 
 
 class Downsample(nn.Module):
@@ -242,8 +234,141 @@ class UNet(nn.Module):
 
         self.final_conv = Block(pre_channel, default(out_channel, in_channel), groups=norm_groups)
     
+    def spectrogram_phase(
+        self, input: torch.Tensor, eps: float = 0.0
+    ):
+        r"""Calculate the magnitude, cos, and sin of the STFT of input.
+
+        Args:
+            input: (batch_size, segments_num)
+            eps: float
+
+        Returns:
+            mag: (batch_size, time_steps, freq_bins)
+            cos: (batch_size, time_steps, freq_bins)
+            sin: (batch_size, time_steps, freq_bins)
+        """
+        (real, imag) = self.stft(input)
+        mag = torch.clamp(real ** 2 + imag ** 2, eps, np.inf) ** 0.5
+        cos = real / mag
+        sin = imag / mag
+        return mag, cos, sin
+    
+    def wav_to_spectrogram_phase(
+        self, input: torch.Tensor, eps: float = 1e-10
+    ):
+        r"""Convert waveforms to magnitude, cos, and sin of STFT.
+
+        Args:
+            input: (batch_size, channels_num, segment_samples)
+            eps: float
+
+        Outputs:
+            mag: (batch_size, channels_num, time_steps, freq_bins)
+            cos: (batch_size, channels_num, time_steps, freq_bins)
+            sin: (batch_size, channels_num, time_steps, freq_bins)
+        """
+        batch_size, channels_num, segment_samples = input.shape
+
+        # Reshape input with shapes of (n, segments_num) to meet the
+        # requirements of the stft function.
+        x = input.reshape(batch_size * channels_num, segment_samples)
+
+        mag, cos, sin = self.spectrogram_phase(x, eps=eps)
+        # mag, cos, sin: (batch_size * channels_num, 1, time_steps, freq_bins)
+
+        _, _, time_steps, freq_bins = mag.shape
+        mag = mag.reshape(batch_size, channels_num, time_steps, freq_bins)
+        cos = cos.reshape(batch_size, channels_num, time_steps, freq_bins)
+        sin = sin.reshape(batch_size, channels_num, time_steps, freq_bins)
+
+        return mag, cos, sin
+    
+    def feature_maps_to_wav(
+        self,
+        input_tensor: torch.Tensor,
+        sp: torch.Tensor,
+        sin_in: torch.Tensor,
+        cos_in: torch.Tensor,
+        audio_length: int,
+    ) -> torch.Tensor:
+        r"""Convert feature maps to waveform.
+        Args:
+            input_tensor: (batch_size, target_sources_num * input_channels * self.K, time_steps, freq_bins)
+            sp: (batch_size, target_sources_num * input_channels, time_steps, freq_bins)
+            sin_in: (batch_size, target_sources_num * input_channels, time_steps, freq_bins)
+            cos_in: (batch_size, target_sources_num * input_channels, time_steps, freq_bins)
+        Outputs:
+            waveform: (batch_size, target_sources_num * input_channels, segment_samples)
+        """
+        batch_size, _, time_steps, freq_bins = input_tensor.shape
+
+        x = input_tensor.reshape(
+            batch_size,
+            self.target_sources_num,
+            self.input_channels,
+            self.K,
+            time_steps,
+            freq_bins,
+        )
+        # x: (batch_size, target_sources_num, input_channles, K, time_steps, freq_bins)
+
+        mask_mag = torch.sigmoid(x[:, :, :, 0, :, :])
+        _mask_real = torch.tanh(x[:, :, :, 1, :, :])
+        _mask_imag = torch.tanh(x[:, :, :, 2, :, :])
+        _, mask_cos, mask_sin = magphase(_mask_real, _mask_imag)
+        linear_mag = x[:, :, :, 3, :, :]
+        # mask_cos, mask_sin: (batch_size, target_sources_num, input_channles, time_steps, freq_bins)
+
+        # Y = |Y|cos∠Y + j|Y|sin∠Y
+        #   = |Y|cos(∠X + ∠M) + j|Y|sin(∠X + ∠M)
+        #   = |Y|(cos∠X cos∠M - sin∠X sin∠M) + j|Y|(sin∠X cos∠M + cos∠X sin∠M)
+        out_cos = (
+            cos_in[:, None, :, :, :] * mask_cos - sin_in[:, None, :, :, :] * mask_sin
+        )
+        out_sin = (
+            sin_in[:, None, :, :, :] * mask_cos + cos_in[:, None, :, :, :] * mask_sin
+        )
+        # out_cos: (batch_size, target_sources_num, input_channles, time_steps, freq_bins)
+        # out_sin: (batch_size, target_sources_num, input_channles, time_steps, freq_bins)
+
+        # Calculate |Y|.
+        out_mag = F.relu_(sp[:, None, :, :, :] * mask_mag + linear_mag)
+        # out_mag: (batch_size, target_sources_num, input_channles, time_steps, freq_bins)
+
+        # Calculate Y_{real} and Y_{imag} for ISTFT.
+        out_real = out_mag * out_cos
+        out_imag = out_mag * out_sin
+        # out_real, out_imag: (batch_size, target_sources_num, input_channles, time_steps, freq_bins)
+
+        # Reformat shape to (n, 1, time_steps, freq_bins) for ISTFT.
+        shape = (
+            batch_size * self.target_sources_num * self.input_channels,
+            1,
+            time_steps,
+            freq_bins,
+        )
+        out_real = out_real.reshape(shape)
+        out_imag = out_imag.reshape(shape)
+
+        # ISTFT.
+        x = self.istft(out_real, out_imag, audio_length)
+        # (batch_size * target_sources_num * input_channels, segments_num)
+
+        # Reshape.
+        waveform = x.reshape(
+            batch_size, self.target_sources_num * self.input_channels, audio_length
+        )
+        # (batch_size, target_sources_num * input_channels, segments_num)
+
+        return waveform
 
     def forward(self, x, time):
+        audio_length = x.shape[2]
+        mag, cos_in, sin_in = self.wav_to_spectrogram_phase(x)
+        
+        x = mag
+
         origin_len = x.shape[-1]
         pad_len = (int(np.ceil(x.shape[3] / 32)) * 32 - origin_len)
         x = F.pad(x, pad=(0, pad_len, 0, 0))
@@ -276,51 +401,6 @@ class UNet(nn.Module):
         x = F.pad(x, pad=(0, 0,0,1))
         x = x[...,:origin_len]
 
-        return self.final_conv(x)
+        separated_audio = self.feature_maps_to_wav(x, mag, sin_in, cos_in, audio_length)
 
-class PixelShuffleUNet(UNet):
-    def __init__(
-        self,
-        in_channel=6,
-        out_channel=3,
-        inner_channel=32,
-        norm_groups=32,
-        channel_mults=(1, 2, 4, 8, 8),
-        attn_res=(8),
-        res_blocks=3,
-        dropout=0,
-        with_noise_level_emb=True,
-        image_size=128
-    ):
-        super().__init__(
-            in_channel=in_channel,
-            out_channel=out_channel,
-            inner_channel=inner_channel,
-            norm_groups=norm_groups,
-            channel_mults=channel_mults,
-            attn_res=attn_res,
-            res_blocks=res_blocks,
-            dropout=dropout,
-            with_noise_level_emb=with_noise_level_emb,
-            image_size=image_size)
-
-        num_mults = len(channel_mults)
-        pre_channel = inner_channel
-        feat_channels = [pre_channel]
-        now_res = image_size
-        noise_level_channel = inner_channel if with_noise_level_emb else None
-
-        ups = []
-        for ind in reversed(range(num_mults)):
-            is_last = (ind < 1)
-            use_attn = (now_res in attn_res)
-            channel_mult = inner_channel * channel_mults[ind]
-            for _ in range(0, res_blocks+1):
-                ups.append(ResnetBlocWithAttn(
-                    pre_channel+feat_channels.pop(), channel_mult, noise_level_emb_dim=noise_level_channel, norm_groups=norm_groups,
-                        dropout=dropout, with_attn=use_attn))
-                pre_channel = channel_mult
-            if not is_last:
-                scale = 2
-                ups.append(PixelShuffle(pre_channel, scale))
-                now_res = now_res*scale
+        return x

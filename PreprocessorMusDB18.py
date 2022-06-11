@@ -52,18 +52,15 @@ class PreprocessorMusDB18:
         mus = musdb.DB(root=self.original_data_dir, subsets=subset_split[0], split=subset_split[1])
         track = mus.tracks[track_index]
 
-        for stem_idx in range(len(track.stems)):
-            feature_dict:dict = dict()
-            audio = self.get_audio_from_musdb_track(track.stems[stem_idx],self.mono)
-            feature_dict["audio"] = audio
-            datatype:str = subset_split[1] if subset_split[1] is not None else subset_split[0]
-            
-            save_path:str = f"{self.preprocessed_data_dir}/{datatype}"
-            os.makedirs(save_path,exist_ok=True)
-            
-            sf.write(save_path + f"/{track.name}_{self.stem_name[stem_idx]}.wav", audio, self.target_sr)
-            with open(save_path + f"/{track.name}_{self.stem_name[stem_idx]}.pkl",'wb') as file_writer:
-                pickle.dump(feature_dict,file_writer)
+        feature_dict:dict = dict()
+        feature_dict["audio"] = self.get_audio_from_musdb_track(track,self.mono)
+        datatype:str = subset_split[1] if subset_split[1] is not None else subset_split[0]
+        
+        save_path:str = f"{self.preprocessed_data_dir}/{datatype}"
+        os.makedirs(save_path,exist_ok=True)
+
+        with open(save_path + f"/{track.name}.pkl",'wb') as file_writer:
+            pickle.dump(feature_dict,file_writer)
 
         print("{} Write to {}".format(track_index, save_path))
         

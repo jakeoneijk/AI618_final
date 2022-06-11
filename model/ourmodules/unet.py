@@ -1,4 +1,5 @@
 import math
+from typing import NoReturn, Tuple
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -159,6 +160,96 @@ class ResnetBlocWithAttn(nn.Module):
             x = self.attn(x)
         return x
 
+# Added for after conv process
+class ICB_Block(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: Tuple,
+        activation: str,
+        momentum: float,
+    ):
+        r"""Convolutional block."""
+        super(ICB_Block, self).__init__()
+
+        self.activation = activation
+        padding = (kernel_size[0] // 2, kernel_size[1] // 2)
+
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=(1, 1),
+            dilation=(1, 1),
+            padding=padding,
+            bias=False,
+        )
+
+        self.bn1 = nn.BatchNorm2d(out_channels, momentum=momentum)
+
+        self.conv2 = nn.Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=(1, 1),
+            dilation=(1, 1),
+            padding=padding,
+            bias=False,
+        )
+
+        self.bn2 = nn.BatchNorm2d(out_channels, momentum=momentum)
+
+        self.init_weights()
+
+    def init_layer(self, layer: nn.Module) -> NoReturn:
+        r"""Initialize a Linear or Convolutional layer."""
+        nn.init.xavier_uniform_(layer.weight)
+
+        if hasattr(layer, "bias"):
+            if layer.bias is not None:
+                layer.bias.data.fill_(0.0)
+
+    def init_bn(self, bn: nn.Module) -> NoReturn:
+        r"""Initialize a Batchnorm layer."""
+        bn.bias.data.fill_(0.0)
+        bn.weight.data.fill_(1.0)
+        bn.running_mean.data.fill_(0.0)
+        bn.running_var.data.fill_(1.0)
+
+    def act(self, x: torch.Tensor, activation: str) -> torch.Tensor:
+        if activation == "relu":
+            return F.relu_(x)
+
+        elif activation == "leaky_relu":
+            return F.leaky_relu_(x, negative_slope=0.01)
+
+        elif activation == "swish":
+            return x * torch.sigmoid(x)
+
+        else:
+            raise Exception("Incorrect activation!")
+
+    def init_weights(self) -> NoReturn:
+        r"""Initialize weights."""
+        self.init_layer(self.conv1)
+        self.init_layer(self.conv2)
+        self.init_bn(self.bn1)
+        self.init_bn(self.bn2)
+
+    def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
+        r"""Forward data into the module.
+        Args:
+            input_tensor: (batch_size, in_feature_maps, time_steps, freq_bins)
+        Returns:
+            output_tensor: (batch_size, out_feature_maps, time_steps, freq_bins)
+        """
+        x = self.act(self.bn1(self.conv1(input_tensor)), self.activation)
+        x = self.act(self.bn2(self.conv2(x)), self.activation)
+        output_tensor = x
+
+        return output_tensor
+
 
 class UNet(nn.Module):
     def __init__(
@@ -175,6 +266,44 @@ class UNet(nn.Module):
         image_size=128
     ):
         super().__init__()
+        
+        # UNet Added
+        self.input_channels = 1
+        self.target_sources_num = 1
+        self.output_sources_num = 1
+
+        window_size = 2048
+        hop_size = window_size//4
+        center = True
+        pad_mode = "reflect"
+        window = "hann"
+        activation = "relu"
+        momentum = 0.01
+
+        self.subbands_num = 1
+        self.K = 4  # outputs: |M|, cos∠M, sin∠M
+        self.downsample_ratio = 2 ** 6  # This number equals 2^{#encoder_blcoks}
+
+        self.stft = STFT(
+            n_fft=window_size,
+            hop_length=hop_size,
+            win_length=window_size,
+            window=window,
+            center=center,
+            pad_mode=pad_mode,
+            freeze_parameters=True,
+        )
+
+        self.istft = ISTFT(
+            n_fft=window_size,
+            hop_length=hop_size,
+            win_length=window_size,
+            window=window,
+            center=center,
+            pad_mode=pad_mode,
+            freeze_parameters=True,
+        )
+        # End
 
         if with_noise_level_emb:
             noise_level_channel = inner_channel
@@ -232,7 +361,7 @@ class UNet(nn.Module):
 
         self.ups = nn.ModuleList(ups)
 
-        self.final_conv = Block(pre_channel, default(out_channel, in_channel), groups=norm_groups)
+        self.final_conv = Block(pre_channel, out_channel*self.K, groups=norm_groups)
     
     def spectrogram_phase(
         self, input: torch.Tensor, eps: float = 0.0
@@ -364,15 +493,21 @@ class UNet(nn.Module):
         return waveform
 
     def forward(self, x, time):
-        audio_length = x.shape[2]
-        mag, cos_in, sin_in = self.wav_to_spectrogram_phase(x)
+        # x = (B, 2, 1, sample_num)
+        x = x.squeeze(-2)
+        audio_length = x.shape[-1]
         
-        x = mag
+        # Get Magnitude and phase individually
+        mag_with_cond, _, _ = self.wav_to_spectrogram_phase(x)
+        mag, cos_in, sin_in = self.wav_to_spectrogram_phase(x[:, 1, :].unsqueeze(-2))
 
-        origin_len = x.shape[-1]
-        pad_len = (int(np.ceil(x.shape[3] / 32)) * 32 - origin_len)
-        x = F.pad(x, pad=(0, pad_len, 0, 0))
-        x = x[:,:, 0 : x.shape[2]-1,:]
+        # Add Pad for even num of convolutions
+        x = mag_with_cond
+        origin_w = x.shape[-1]
+        origin_h = x.shape[-2]
+        pad_right = (int(np.ceil(origin_w / 32)) * 32 - origin_w)
+        pad_top = (int(np.ceil(origin_h / 32)) * 32 - origin_h)
+        x = F.pad(x, pad=(0, pad_right, pad_top, 0))
         
         t = self.noise_level_mlp(time) if exists(
             self.noise_level_mlp) else None
@@ -398,9 +533,12 @@ class UNet(nn.Module):
                 x = layer(x)
         x = self.final_conv(x)
         
-        x = F.pad(x, pad=(0, 0,0,1))
-        x = x[...,:origin_len]
+        # Recover shape
+        x = F.pad(x, pad=(0, 0, 0, origin_h - x.shape[-2]))
+        x = x[...,:origin_w]
 
         separated_audio = self.feature_maps_to_wav(x, mag, sin_in, cos_in, audio_length)
-
-        return x
+        # separated_audio: (batch_size, output_sources_num * input_channels, segments_num)
+        
+        separated_audio = separated_audio.unsqueeze(-2)
+        return separated_audio

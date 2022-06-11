@@ -8,7 +8,7 @@ from random import randint
 import torch.utils.data.dataset as dataset
 
 class TorchDatasetMusDB18Spec(dataset.Dataset):
-    def __init__(self, dataset_dir:str, mode:str='HR', sr:int = 16000, segment_length_second:float=3, samples_per_track:int=64, scale_value:float = 65) -> None:
+    def __init__(self, dataset_dir:str, mode:str='HR', sr:int = 16000, segment_length_second:float=3, samples_per_track:int=64) -> None:
         data_path_list:list = glob(f"{dataset_dir}/*.pkl")
         self.data_set = list()
 
@@ -20,7 +20,6 @@ class TorchDatasetMusDB18Spec(dataset.Dataset):
         self.segment_size = int(sr * segment_length_second)
         self.process = ProcessLRSRAudio()
         self.need_LR = True if mode == 'LRHR' else False
-        self.scale_value = scale_value
     
     def __len__(self) -> int:
         return self.samples_per_track * len(self.data_set)
@@ -41,15 +40,18 @@ class TorchDatasetMusDB18Spec(dataset.Dataset):
 
         audio_dict:dict = self.process.get_lr_hr_dict_keep_sr(data) # (1, 48000) x2
 
-        #print(audio_dict["hr"].shape, audio_dict["lr"].shape)
-        hr_spec = self.process.get_spectrogram_and_phase_from_audio(audio_dict["hr"])["spec"].float() # (1, 129, 376)
-        lr_spec = self.process.get_spectrogram_and_phase_from_audio(audio_dict["lr"])["spec"].float()
+        hr_audio = audio_dict["hr"].unsqueeze(-2).float()
+        lr_audio = audio_dict["lr"].unsqueeze(-2).float()
 
-        hr_spec = hr_spec / self.scale_value
-        lr_spec = lr_spec / self.scale_value
+        # bit = 32
+        # _, dur = hr_audio.sh
+        # resize = torchvision.transforms.Resize((round(dur/bit)*bit), 
+        #                                        torchvision.transforms.InterpolationMode.BILINEAR) 
+        # hr_audio = resize(hr_audio)
+        # lr_audio = resize(lr_audio)
 
-        result = {'HR' : hr_spec, 'SR' : lr_spec, 'Index' : index}
+        result = {'HR' : hr_audio, 'SR' : lr_audio, 'Index' : index}
         if self.need_LR : 
-            result['LR'] = lr_spec
+            result['LR'] = lr_audio
 
         return result

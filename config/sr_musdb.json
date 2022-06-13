@@ -10,13 +10,14 @@
         "results": "results",
         "checkpoint": "checkpoint",
         //"resume_state": null
-        "resume_state": "experiments/sr_musdb_220603_015233/checkpoint/I90000_E402" //pretrain model or training state
+        "resume_state": "experiments/sr_musdb_base/checkpoint/I690000_E502" //pretrain model or training state
     },
     "datasets": {
         "train": {
             "dataroot": "./dataset/musdb18/valid",
 	"mode": "HR",
 	"sr" : 16000,
+    "max_value_of_spec": 65,
 	"segment_length_second" : 3,
 	"samples_per_track" : 64,
             "batch_size": 8,
@@ -29,6 +30,7 @@
 	"samples_per_track" : 1,
             "mode": "LRHR",
 	"sr" : 16000,
+    "max_value_of_spec": 65,
 	"segment_length_second" : 3,
             "data_len": 5 // data length in validation 
         }

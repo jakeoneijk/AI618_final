@@ -57,7 +57,7 @@ class ProcessLRSRAudio:
 
 class TorchDatasetMusDB18(dataset.Dataset):
     def __init__(self, dataset_dir:str, mode:str='HR', sr:int = 16000, 
-                 segment_length_second:float=3, samples_per_track:int=64, need_mask=False) -> None:
+                 segment_length_second:float=3, samples_per_track:int=64, scale_value:int=65, need_mask=False) -> None:
         data_path_list:list = os.listdir(dataset_dir)
         self.data_set = list()
 
@@ -70,6 +70,7 @@ class TorchDatasetMusDB18(dataset.Dataset):
         self.process = ProcessLRSRAudio()
         self.need_LR = mode=='LRHR'
         self.need_mask = need_mask
+        self.scale = scale_value
     
     def __len__(self) -> int:
         return self.samples_per_track * len(self.data_set)

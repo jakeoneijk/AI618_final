@@ -9,13 +9,6 @@ from core.wandb_logger import WandbLogger
 from tensorboardX import SummaryWriter
 import os
 import numpy as np
-<<<<<<< HEAD
-import pdb
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str, default='config/sr_musdb.json',
-=======
 from SpecPlot import SpecPlot
 
 from TorchDatasetMusDB18Spec import TorchDatasetMusDB18Spec
@@ -23,7 +16,6 @@ from TorchDatasetMusDB18Spec import TorchDatasetMusDB18Spec
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', type=str, default='config/musdb.json',
->>>>>>> d5a80f58ccc7ea47c93354b008c3fe870ece53f3
                         help='JSON file for configuration')
     parser.add_argument('-p', '--phase', type=str, choices=['train', 'val'],
                         help='Run either train(training) or val(generation)', default='train')

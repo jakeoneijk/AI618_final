@@ -19,10 +19,3 @@ class MetricSound:
         frequency_axis:int = 0
 
         return np.mean(np.sqrt(np.mean(diff_squared, axis=frequency_axis)))
-    
-    def get_metric_from_audio_path(self,pred_audio_path,target_audio_path):
-        pred_audio,sr = librosa.load(pred_audio_path,sr=None)
-        target_audio,sr = librosa.load(target_audio_path,sr=None)
-        snr = self.signal_to_noise(pred_audio,target_audio)
-        lsd = self.lds_log_spectral_distance(pred_audio,target_audio)
-        return {"snr":snr, "lsd":lsd}

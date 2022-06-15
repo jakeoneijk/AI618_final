@@ -1,3 +1,4 @@
+from torchvision.transforms import functional as trans_fn
 import argparse
 from io import BytesIO
 import multiprocessing
@@ -6,7 +7,6 @@ from functools import partial
 from multiprocessing.sharedctypes import RawValue
 from PIL import Image
 from tqdm import tqdm
-from torchvision.transforms import functional as trans_fn
 import os
 from pathlib import Path
 import lmdb
@@ -161,15 +161,15 @@ def prepare(img_path, out_path, n_worker, sizes=(16, 128), resample=Image.BICUBI
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--path', '-p', type=str,
-                        default='{}/Dataset/celebahq_256'.format(Path.home()))
+                        default='/home/jakeoneijk/220527_Image-Super-Resolution-via-Iterative-Refinement/Image-Super-Resolution-via-Iterative-Refinement/data/thumbnails128x128/00000')
     parser.add_argument('--out', '-o', type=str,
-                        default='./dataset/celebahq')
+                        default='/home/jakeoneijk/220527_Image-Super-Resolution-via-Iterative-Refinement/Image-Super-Resolution-via-Iterative-Refinement/dataset')
 
-    parser.add_argument('--size', type=str, default='64,512')
-    parser.add_argument('--n_worker', type=int, default=3)
+    parser.add_argument('--size', type=str, default='16,128')
+    parser.add_argument('--n_worker', type=int, default=1)
     parser.add_argument('--resample', type=str, default='bicubic')
     # default save in png format
-    parser.add_argument('--lmdb', '-l', action='store_true')
+    parser.add_argument('--lmdb', '-l',default=True, action='store_true')
 
     args = parser.parse_args()
 

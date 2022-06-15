@@ -57,7 +57,7 @@ if __name__ == "__main__":
 
     spec_plot = SpecPlot(opt['datasets']["train"]["max_value_of_spec"])
     # dataset
-    
+    ## EDITED by jaekwon im : change data set
     from TorchDatasetMusDB18 import TorchDatasetMusDB18
     for phase, dataset_opt in opt['datasets'].items():
         if phase == 'train' and args.phase != 'val':
@@ -130,7 +130,7 @@ if __name__ == "__main__":
                         diffusion.feed_data(val_data)
                         diffusion.test(continous=False)
                         visuals = diffusion.get_current_visuals()
-
+                        ## EDITED by jaekwon im : change metric
                         spec_plot.model_output_to_spec_db_scale(visuals['SR'],'{}/{}_{}_sr.png'.format(result_path, current_step, idx))
                         spec_plot.model_output_to_spec_db_scale(visuals['HR'],'{}/{}_{}_hr.png'.format(result_path, current_step, idx))
                         spec_plot.model_output_to_spec_db_scale(visuals['LR'],'{}/{}_{}_lr.png'.format(result_path, current_step, idx))

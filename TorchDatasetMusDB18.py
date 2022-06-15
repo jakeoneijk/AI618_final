@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import torchvision
 
 import pdb
-
+## EDITED by jaekwon im : wrote whole class
 class ProcessLRSRAudio:
     def __init__(self, nfft:int = 256, hop_size:int=128, upsample_ratio:int = 2) -> None:
         self.nfft:int = nfft

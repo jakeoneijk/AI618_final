@@ -6,7 +6,7 @@ import numpy as np
 import librosa
 from numpy import ndarray
 import musdb
-
+## EDITED by jaekwon im : wrote whole class
 class PreprocessorMusDB18:
     def __init__(self,original_data_dir:str,preprocessed_data_dir:str,target_sr:int) -> None:
         self.original_data_dir:str = original_data_dir

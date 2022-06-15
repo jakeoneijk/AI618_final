@@ -2,7 +2,7 @@ from numpy import ndarray
 
 import numpy as np
 import librosa
-
+## EDITED by jaekwon im : wrote whole class
 class MetricSound:
     
     def signal_to_noise(self,pred_waveform:ndarray,target_waveform:ndarray) -> float:

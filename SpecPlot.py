@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import soundfile as sf
 
-
+## EDITED by jaekwon im : wrote whole class
 class SpecPlot:
     def __init__(self, scale_value:float=65,sample_rate:int = 16000,output_path:str="./") -> None:
         self.scale_value:float = scale_value

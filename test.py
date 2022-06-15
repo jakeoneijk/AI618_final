@@ -10,7 +10,7 @@ from SpecPlot import SpecPlot
 from TorchDatasetMusDB18SpecTest import TorchDatasetMusDB18SpecTest
 from core.logger import NoneDict
 from model.model import DDPM
-
+## EDITED by jaekwon im : wrote whole class
 class Test:
     def __init__(
         self,

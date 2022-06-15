@@ -3,7 +3,7 @@ import os
 from tqdm import tqdm
 import numpy as np
 from MetricSound import MetricSound
-
+## EDITED by jaekwon im : wrote whole class
 class Eval:
     def __init__(
         self,

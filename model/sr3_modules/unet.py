@@ -242,7 +242,7 @@ class UNet(nn.Module):
 
         self.final_conv = Block(pre_channel, default(out_channel, in_channel), groups=norm_groups)
     
-
+    ## EDITED by jaekwon im : spectrogram size change
     def forward(self, x, time):
         origin_len = x.shape[-1]
         pad_len = (int(np.ceil(x.shape[3] / 32)) * 32 - origin_len)
@@ -278,11 +278,7 @@ class UNet(nn.Module):
 
         return x
 
-<<<<<<< HEAD
-=======
-        return self.final_conv(x)
 
->>>>>>> main
 class PixelShuffleUNet(UNet):
     def __init__(
         self,
@@ -328,8 +324,4 @@ class PixelShuffleUNet(UNet):
             if not is_last:
                 scale = 2
                 ups.append(PixelShuffle(pre_channel, scale))
-<<<<<<< HEAD
                 now_res = now_res*scale
-=======
-                now_res = now_res*scale
->>>>>>> main

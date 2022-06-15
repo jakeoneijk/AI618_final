@@ -60,16 +60,16 @@ if __name__ == "__main__":
     for phase, dataset_opt in opt['datasets'].items():
         if phase == 'train' and args.phase != 'val':
             #train_set = Data.create_dataset(dataset_opt, phase)
-            train_set = TorchDatasetMusDB18(dataset_opt['dataroot'], dataset_opt['mode'],
+            train_set = TorchDatasetMusDB18Spec(dataset_opt['dataroot'], dataset_opt['mode'],
                                             dataset_opt['sr'], dataset_opt['segment_length_second'], 
-                                            dataset_opt['samples_per_track'])
+                                            dataset_opt['samples_per_track'], dataset_opt["max_value_of_spec"])
             train_loader = Data.create_dataloader(
                 train_set, dataset_opt, phase)
         elif phase == 'val':
             #val_set = Data.create_dataset(dataset_opt, phase)
-            val_set = TorchDatasetMusDB18(dataset_opt['dataroot'], dataset_opt['mode'],
+            val_set = TorchDatasetMusDB18Spec(dataset_opt['dataroot'], dataset_opt['mode'],
                                             dataset_opt['sr'], dataset_opt['segment_length_second'],
-                                            dataset_opt['samples_per_track'])            
+                                            dataset_opt['samples_per_track'], dataset_opt["max_value_of_spec"])            
             val_loader = Data.create_dataloader(
                 val_set, dataset_opt, phase)
     logger.info('Initial Dataset Finished')

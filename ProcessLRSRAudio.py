@@ -33,11 +33,19 @@ class ProcessLRSRAudio:
         time_size:int = max(low_audio.shape[-1],hr_audio.shape[-1])
         return {"hr":hr_audio[...,:time_size],"lr":low_audio[...,:time_size]}
     
-    def get_spectrogram_and_phase_from_audio(self,audio:torch):
+    def get_spectrogram_and_phase_from_audio(self,audio:torch, include_mask=False):
         stft:Tensor = torch.stft(audio, self.nfft, self.hop_size, window=self.hann_window, return_complex=True)
         spectrogram:Tensor = torch.abs(stft)
         phase:Tensor = torch.angle(stft)
-        return {"spec":spectrogram, "phase": phase} 
+        
+        ret = {"spec":spectrogram, "phase": phase}
+        if include_mask:
+            mask = stft.clone()
+            mask[:,int((self.nfft//2+1) / self.upsample_ratio):,...] = 0
+            mask = torch.abs(mask)
+            mask = torch.where(mask==0, 1, 0)
+            ret['mask'] = mask
+        return ret
 
 if __name__ == "__main__":
     from torch.utils.data import DataLoader

@@ -1,3 +1,6 @@
+## EDITED by Dongryung Lee for inpainting
+
+from pyrsistent import v
 import torch
 import data as Data
 import model as Model
@@ -13,6 +16,9 @@ import pdb
 from SpecPlot import SpecPlot
 import librosa
 import soundfile as sf
+from TorchDatasetMusDB18Spec import TorchDatasetMusDB18Spec
+from MetricSound import MetricSound
+import csv
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -56,20 +62,21 @@ if __name__ == "__main__":
 
     # dataset
     
-    from TorchDatasetMusDB18 import TorchDatasetMusDB18
     for phase, dataset_opt in opt['datasets'].items():
         if phase == 'train' and args.phase != 'val':
             #train_set = Data.create_dataset(dataset_opt, phase)
-            train_set = TorchDatasetMusDB18(dataset_opt['dataroot'], dataset_opt['mode'],
+            train_set = TorchDatasetMusDB18Spec(dataset_opt['dataroot'], dataset_opt['mode'],
                                             dataset_opt['sr'], dataset_opt['segment_length_second'], 
-                                            dataset_opt['samples_per_track'], need_mask=True)
+                                            dataset_opt['samples_per_track'], dataset_opt["max_value_of_spec"], 
+                                            need_mask=True, need_audio=True)
             train_loader = Data.create_dataloader(
                 train_set, dataset_opt, phase)
         elif phase == 'val':
             #val_set = Data.create_dataset(dataset_opt, phase)
-            val_set = TorchDatasetMusDB18(dataset_opt['dataroot'], dataset_opt['mode'],
+            val_set = TorchDatasetMusDB18Spec(dataset_opt['dataroot'], dataset_opt['mode'],
                                             dataset_opt['sr'], dataset_opt['segment_length_second'],
-                                            dataset_opt['samples_per_track'], need_mask=True)            
+                                            dataset_opt['samples_per_track'], dataset_opt["max_value_of_spec"],
+                                            need_mask=True, need_audio=True)            
             val_loader = Data.create_dataloader(
                 val_set, dataset_opt, phase)
     logger.info('Initial Dataset Finished')
@@ -89,48 +96,37 @@ if __name__ == "__main__":
     idx = 0
     result_path = '{}'.format(opt['path']['results'])
     os.makedirs(result_path, exist_ok=True)
+
+    # metric
+    metric = MetricSound()
+    result = np.zeros((len(val_loader.dataset),2))
     for _,  val_data in enumerate(val_loader):
         idx += 1
         diffusion.feed_data(val_data)
         diffusion.test_inpaint(continuous=False)
         visuals = diffusion.get_current_visuals()
 
-        lr_inv = librosa.griffinlim(visuals['LR'].detach().cpu().numpy()[0])
-        hr_inv = librosa.griffinlim(visuals['HR'].detach().cpu().numpy()[0])
-        sr_inv = librosa.griffinlim(visuals['SR'].detach().cpu().numpy())
+        visuals['SR'][:,128,:0]
+        lr_inv = librosa.griffinlim(visuals['LR'].detach().cpu().numpy()[0], hop_length=128)
+        #hr_inv = librosa.griffinlim(visuals['HR'].detach().cpu().numpy()[0], hop_length=128)
+        hr_inv = val_data['audio'][0].cpu().numpy()
+        sr_inv = librosa.griffinlim(visuals['SR'].detach().cpu().numpy(), hop_length=128)
 
         sf.write('{}/{}_{}_lr.wav'.format(result_path, current_step, idx), lr_inv.T, 16000)
         sf.write('{}/{}_{}_hr.wav'.format(result_path, current_step, idx), hr_inv.T, 16000)
         sf.write('{}/{}_{}_sr.wav'.format(result_path, current_step, idx), sr_inv.T, 16000)
-
+        
         spec_plot.model_output_to_spec_db_scale(visuals['SR'],'{}/{}_{}_sr.png'.format(result_path, current_step, idx))
         spec_plot.model_output_to_spec_db_scale(visuals['HR'],'{}/{}_{}_hr.png'.format(result_path, current_step, idx))
         spec_plot.model_output_to_spec_db_scale(visuals['LR'],'{}/{}_{}_lr.png'.format(result_path, current_step, idx))
         spec_plot.model_output_to_spec_db_scale(visuals['INF'],'{}/{}_{}_inf.png'.format(result_path, current_step, idx))
 
-        hr_img = Metrics.tensor2img(visuals['HR'])  # uint8
-        lr_img = Metrics.tensor2img(visuals['LR'])  # uint8
-        fake_img = Metrics.tensor2img(visuals['INF'])  # uint8
+        snr = metric.signal_to_noise(sr_inv, hr_inv)
+        lsd = metric.lds_log_spectral_distance(sr_inv, hr_inv)
 
-        # sr_img_mode = 'grid'
-        # if sr_img_mode == 'single':
-        #     # single img series
-        #     sr_img = visuals['SR']  # uint8
-        #     sample_num = sr_img.shape[0]
-        #     for iter in range(0, sample_num):
-        #         Metrics.save_img(
-        #             Metrics.tensor2img(sr_img[iter]), '{}/{}_{}_sr_{}.png'.format(result_path, current_step, idx, iter))
-        # else:
-        #     # grid img
-        #     sr_img = Metrics.tensor2img(visuals['SR'])  # uint8
-        #     Metrics.save_img(
-        #         sr_img, '{}/{}_{}_sr_process.png'.format(result_path, current_step, idx))
-        #     Metrics.save_img(
-        #         Metrics.tensor2img(visuals['SR'][-1]), '{}/{}_{}_sr.png'.format(result_path, current_step, idx))
+        result[idx-1, 0] = snr.item()
+        result[idx-1, 1] = lsd.item()
 
-        # Metrics.save_img(
-        #     hr_img, '{}/{}_{}_hr.png'.format(result_path, current_step, idx))
-        # Metrics.save_img(
-        #     lr_img, '{}/{}_{}_lr.png'.format(result_path, current_step, idx))
-        # Metrics.save_img(
-        #     fake_img, '{}/{}_{}_inf.png'.format(result_path, current_step, idx))
+        # save metrics
+        np.save(result_path + '/metrics.npy', result, allow_pickle=False)
+        print('SNR: {}, LSD:{}'.format(np.median(result[:idx, 0]), np.median(result[:idx, 1])))

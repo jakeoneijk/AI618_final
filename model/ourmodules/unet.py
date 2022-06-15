@@ -233,6 +233,8 @@ class UNet(nn.Module):
         self.ups = nn.ModuleList(ups)
 
         self.final_conv = Block(pre_channel, default(out_channel, in_channel), groups=norm_groups)
+
+        #self.stft = STFT(n_fft=256, hop_length=128, win_length=256)
     
     def spectrogram_phase(
         self, input: torch.Tensor, eps: float = 0.0
@@ -248,7 +250,8 @@ class UNet(nn.Module):
             cos: (batch_size, time_steps, freq_bins)
             sin: (batch_size, time_steps, freq_bins)
         """
-        (real, imag) = self.stft(input)
+        breakpoint()
+        (real, imag) = torch.stft(input, 256, 128, window=torch.hann_window(256).to(input.device), return_complex=True)
         mag = torch.clamp(real ** 2 + imag ** 2, eps, np.inf) ** 0.5
         cos = real / mag
         sin = imag / mag
@@ -268,11 +271,12 @@ class UNet(nn.Module):
             cos: (batch_size, channels_num, time_steps, freq_bins)
             sin: (batch_size, channels_num, time_steps, freq_bins)
         """
-        batch_size, channels_num, segment_samples = input.shape
-
+        
+        batch_size, condition_dim, channels_num, segment_samples = input.shape
+        
         # Reshape input with shapes of (n, segments_num) to meet the
         # requirements of the stft function.
-        x = input.reshape(batch_size * channels_num, segment_samples)
+        x = input[:,1,:,:].reshape(batch_size * channels_num, segment_samples)
 
         mag, cos, sin = self.spectrogram_phase(x, eps=eps)
         # mag, cos, sin: (batch_size * channels_num, 1, time_steps, freq_bins)

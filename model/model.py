@@ -46,6 +46,7 @@ class DDPM(BaseModel):
         self.data = self.set_device(data)
 
     def optimize_parameters(self):
+        
         self.optG.zero_grad()
         l_pix = self.netG(self.data)
         # need to average in multi-gpu
@@ -68,15 +69,17 @@ class DDPM(BaseModel):
                     self.data['SR'], continous)
         self.netG.train()
 
+    ## EDITED by Dongryung Lee for inpainting
     def test_inpaint(self, continuous=False):
         self.netG.eval()
+        
         with torch.no_grad():
             if isinstance(self.netG, nn.DataParallel):
                 self.SR = self.netG.module.image_completion(
-                    self.data['SR'], self.data['mask'], resample_steps=1, continuous=continuous)
+                    self.data['SR'], self.data['mask'], resample_steps=10, continuous=continuous)
             else:
                 self.SR = self.netG.image_completion(
-                    self.data['SR'], self.data['mask'], resample_steps=1, continuous=continuous)
+                    self.data['SR'], self.data['mask'], resample_steps=6, continuous=continuous)
         self.netG.train()
 
     def sample(self, batch_size=1, continous=False):

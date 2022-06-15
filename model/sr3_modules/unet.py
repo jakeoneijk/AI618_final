@@ -271,7 +271,6 @@ class UNet(nn.Module):
                 x = layer(torch.cat((x, feats.pop()), dim=1), t)
             else:
                 x = layer(x)
-        x = self.final_conv(x)
         
         x = F.pad(x, pad=(0, 0,0,1))
         x = x[...,:origin_len]

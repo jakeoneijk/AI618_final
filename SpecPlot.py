@@ -6,7 +6,7 @@ import librosa.display
 import numpy as np
 import matplotlib.pyplot as plt
 
-
+## EDITED by Dongryung Lee adopted from Jaekwon Im's plotting code
 class SpecPlot:
     def __init__(self, scale_value:float=65) -> None:
         self.scale_value:float = scale_value
@@ -20,3 +20,5 @@ class SpecPlot:
 
         if save_path != "":
             plt.savefig(save_path,dpi=1000)
+        
+        plt.close()

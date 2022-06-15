@@ -173,6 +173,7 @@ class GaussianDiffusion(nn.Module):
         noise = torch.randn_like(x) if t > 0 else torch.zeros_like(x)
         return model_mean + noise * (0.5 * model_log_variance).exp()
 
+    ## EDITED by Dongryung Lee for inpainting
     @torch.no_grad()
     def p_inpainting_sample(self, x0, xt, mask, t, clip_denoised=True, condition_x=None):
         assert mask.shape == xt.shape, 'Shape of the mask and x must match'
@@ -216,6 +217,7 @@ class GaussianDiffusion(nn.Module):
         else:
             return ret_img[-1]
 
+    ## EDITED by Dongryung Lee for inpainting
     @torch.no_grad()
     def p_inpainting_loop(self, x_in, mask, resample_steps, continous=False):
         device = self.betas.device
@@ -228,6 +230,8 @@ class GaussianDiffusion(nn.Module):
         for i in tqdm(reversed(range(0, self.num_timesteps)), desc='sampling loop time step', total=self.num_timesteps):
             for u in range(resample_steps):
                 img = self.p_inpainting_sample(x_in, img, mask, i, condition_x=x)
+                if u < resample_steps - 1:
+                    img = self.q_onestep(img, i)
             if i % sample_inter == 0:
                 ret_img = torch.cat([ret_img, img], dim=0)
         if continous:
@@ -241,10 +245,12 @@ class GaussianDiffusion(nn.Module):
         channels = self.channels
         return self.p_sample_loop((batch_size, channels, image_size, image_size), continous)
 
+    ## EDITED by Dongryung Lee for inpainting
     @torch.no_grad()
     def super_resolution(self, x_in, continous=False):
         return self.p_sample_loop(x_in, continous)
 
+    ## EDITED by Dongryung Lee for inpainting
     def image_completion(self, x_in, mask, resample_steps=10, continuous=False):
         return self.p_inpainting_loop(x_in=x_in, mask=mask, resample_steps=resample_steps, continous=continuous)
 
@@ -256,6 +262,12 @@ class GaussianDiffusion(nn.Module):
             continuous_sqrt_alpha_cumprod * x_start +
             (1 - continuous_sqrt_alpha_cumprod**2).sqrt() * noise
         )
+
+    ## EDITED by Dongryung Lee for inpainting
+    def q_onestep(self, x_tm1, t, noise=None):
+        noise = default(noise, lambda: torch.randn_like(x_tm1))
+
+        return ((1-self.betas[t]).sqrt() * x_tm1 + self.betas[t] * noise)
 
     def p_losses(self, x_in, noise=None):
         x_start = x_in['HR']

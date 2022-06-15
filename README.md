@@ -1,9 +1,13 @@
-conda create -n music python=3.8  
-conda activate music  
-pip install -r requirement.txt  
-pip install musdb  
-pip install numpy=1.20  
-conda install -c conda-forge ffmpeg  
-pip install cffi  
-conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch  
-pip install tensorboard  
+### Instruction
+
+## Data preparation
+1. Download MUSDB18 dataset and place it in data/
+2. Run:
+    ```
+        python PreprocessorMusDB18.py
+    ```
+## How to inprint
+1. Run:
+```
+    python inpaint.py -p val -c config/sr_musdb.json -gpu 0
+```

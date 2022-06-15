@@ -278,6 +278,11 @@ class UNet(nn.Module):
 
         return x
 
+<<<<<<< HEAD
+=======
+        return self.final_conv(x)
+
+>>>>>>> main
 class PixelShuffleUNet(UNet):
     def __init__(
         self,
@@ -323,4 +328,8 @@ class PixelShuffleUNet(UNet):
             if not is_last:
                 scale = 2
                 ups.append(PixelShuffle(pre_channel, scale))
+<<<<<<< HEAD
                 now_res = now_res*scale
+=======
+                now_res = now_res*scale
+>>>>>>> main

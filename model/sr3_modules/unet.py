@@ -65,6 +65,15 @@ class Upsample(nn.Module):
     def forward(self, x):
         return self.conv(self.up(x))
 
+class PixelShuffle(nn.Module):
+    def __init__(self, dim, scale=2):
+        self.conv = nn.Conv2d(dim, dim*scale*scale, padding='same')
+        self.pixel_shuffle = nn.PixelShuffle(scale)
+    
+    def forward(self, x):
+        return self.pixel_shuffle(self.conv(x))
+
+
 
 class Downsample(nn.Module):
     def __init__(self, dim):
@@ -268,3 +277,50 @@ class UNet(nn.Module):
         x = x[...,:origin_len]
 
         return x
+
+class PixelShuffleUNet(UNet):
+    def __init__(
+        self,
+        in_channel=6,
+        out_channel=3,
+        inner_channel=32,
+        norm_groups=32,
+        channel_mults=(1, 2, 4, 8, 8),
+        attn_res=(8),
+        res_blocks=3,
+        dropout=0,
+        with_noise_level_emb=True,
+        image_size=128
+    ):
+        super().__init__(
+            in_channel=in_channel,
+            out_channel=out_channel,
+            inner_channel=inner_channel,
+            norm_groups=norm_groups,
+            channel_mults=channel_mults,
+            attn_res=attn_res,
+            res_blocks=res_blocks,
+            dropout=dropout,
+            with_noise_level_emb=with_noise_level_emb,
+            image_size=image_size)
+
+        num_mults = len(channel_mults)
+        pre_channel = inner_channel
+        feat_channels = [pre_channel]
+        now_res = image_size
+        noise_level_channel = inner_channel if with_noise_level_emb else None
+
+        ups = []
+        for ind in reversed(range(num_mults)):
+            is_last = (ind < 1)
+            use_attn = (now_res in attn_res)
+            channel_mult = inner_channel * channel_mults[ind]
+            for _ in range(0, res_blocks+1):
+                ups.append(ResnetBlocWithAttn(
+                    pre_channel+feat_channels.pop(), channel_mult, noise_level_emb_dim=noise_level_channel, norm_groups=norm_groups,
+                        dropout=dropout, with_attn=use_attn))
+                pre_channel = channel_mult
+            if not is_last:
+                scale = 2
+                ups.append(PixelShuffle(pre_channel, scale))
+                now_res = now_res*scale

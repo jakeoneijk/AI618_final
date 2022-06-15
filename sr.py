@@ -13,9 +13,11 @@ from SpecPlot import SpecPlot
 
 from TorchDatasetMusDB18Spec import TorchDatasetMusDB18Spec
 
+import pdb
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str, default='config/musdb.json',
+    parser.add_argument('-c', '--config', type=str, default='config/sr_musdb.json',
                         help='JSON file for configuration')
     parser.add_argument('-p', '--phase', type=str, choices=['train', 'val'],
                         help='Run either train(training) or val(generation)', default='train')
@@ -55,6 +57,8 @@ if __name__ == "__main__":
 
     spec_plot = SpecPlot(opt['datasets']["train"]["max_value_of_spec"])
     # dataset
+    
+    from TorchDatasetMusDB18 import TorchDatasetMusDB18
     for phase, dataset_opt in opt['datasets'].items():
         if phase == 'train' and args.phase != 'val':
             train_set = TorchDatasetMusDB18Spec(dataset_opt['dataroot'], dataset_opt['mode'],
@@ -75,6 +79,7 @@ if __name__ == "__main__":
     diffusion = Model.create_model(opt)
     logger.info('Initial Model Finished')
 
+
     # Train
     current_step = diffusion.begin_step
     current_epoch = diffusion.begin_epoch
@@ -90,6 +95,7 @@ if __name__ == "__main__":
         while current_step < n_iter:
             current_epoch += 1
             for _, train_data in enumerate(train_loader):
+                
                 current_step += 1
                 if current_step > n_iter:
                     break
@@ -144,11 +150,12 @@ if __name__ == "__main__":
                             lr_img, '{}/{}_{}_lr.png'.format(result_path, current_step, idx))
                         Metrics.save_img(
                             fake_img, '{}/{}_{}_inf.png'.format(result_path, current_step, idx))
-                        tb_logger.add_image(
-                            'Iter_{}'.format(current_step),
-                            np.transpose(np.concatenate(
-                                (fake_img, sr_img, hr_img), axis=1), [2, 0, 1]),
-                            idx)
+                        try : 
+                            tb_logger.add_image('Iter_{}'.format(current_step),
+                                np.expand_dims(np.concatenate((fake_img, sr_img, hr_img), axis=1),0),idx) 
+                            # np.transpose( , [2, 0, 1])
+                        except : 
+                            pdb.set_trace()
                         avg_psnr += Metrics.calculate_psnr(
                             sr_img, hr_img)
 

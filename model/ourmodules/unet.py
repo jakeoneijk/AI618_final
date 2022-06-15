@@ -362,6 +362,13 @@ class UNet(nn.Module):
         # (batch_size, target_sources_num * input_channels, segments_num)
 
         return waveform
+    
+    def istft_by_cos_sin_mag_audio_length(self,mag: torch.Tensor, sin_in: torch.Tensor, cos_in: torch.Tensor, audio_length: int):
+        out_real = mag * cos_in
+        out_imag = mag * sin_in
+        output_audio = self.istft(out_real, out_imag, audio_length)
+        return output_audio
+
 
     def forward(self, x, time):
         audio_length = x.shape[2]

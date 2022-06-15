@@ -130,3 +130,8 @@ dmypy.json
 .pyre/
 
 *.lmdb
+
+# data
+data/
+dataset/
+*.png
